@@ -1,7 +1,21 @@
 Auto-analysis Skill options:
 
 /bt-re-controller
-CHIP_NAME = Chipsea CST85F01
-BT_SUPPORT = DUAL_MODE
-STACK_MODE = HOST_ONLY
-BT_SPEC_VERSION = 5.0
+CHIP_NAME = Goodix GR551x
+BT_SUPPORT = BLE_ONLY
+STACK_MODE = FULL_STACK
+BT_SPEC_VERSION = 5.1
+
+# BT_SPEC_VERSION basis:
+# NOT cross-referenced from the binary: this archive is the ROM-patch/glue layer and the LL_VERSION_IND sender lives in the on-chip mask ROM whose bytes are not in this image (rom_symbol_gcc.txt names only the receiver, ll_version_ind_handler = 0x00036409). No VersNr/CompId writer exists in the 1473 archive functions.
+# Vendor claim (only evidence): GR551x.SDK README.md 'single-mode, low-power Bluetooth 5.1 SoC ... integrates Bluetooth 5.1 Protocol Stack'. Corroboration from the image: every HCI/LLCP handler patch present is a <=5.1 feature (LE ext adv/scan/create-conn, privacy mode, resolving list, P-256, LLCP 0x00/0x01/0x0F/0x16); nothing ISO/CIS/BIS/power-control (5.2+). A 5.1 down-select therefore hides nothing that is in this image; use NEWEST if you want no down-select.
+
+# IMAGE = ROM-PATCH LAYER, NOT THE STACK. The RivieraWaves BLE stack (host + controller) is in the GR551x mask ROM (block 'ROM' 0x00000000-0x0007FFFF, uninitialized: NO BYTES). The archive holds 1473 functions of patch/glue/HAL/SDK-API code. 903 of its 929 externals are ROM functions/data (2010 call sites + 726 data refs), named and placed at their REAL ROM addresses from the SDK's platform/soc/linker/gcc/rom_symbol_gcc.txt (same release: libble_sdk.a md5 24c8de6571470b5ef3755a701f72a258 matches). 1236 ROM functions + 253 ROM data labels exist in the project as byte-less symbols; exclude the ROM block from any function census, truth extraction or eval count.
+# NAMING CONVENTION (how to read the glue): '<rom_fn>_patch' (219 + 15 infix) = a replacement body that runs INSTEAD of / around ROM function <rom_fn>; '<rom_fn>_replace' (40) = registration glue that installs a patch -- 33 by writing the patch address into a ROM-owned RAM hook pointer (block RAM_00800000, hook names from rom_symbol_gcc.txt, e.g. llc_llcp_send, gap_adv_fsm_next, ble_irq_handler), 7 via the Cortex-M FPB unit (gr5xx_fpb_func_register: comparator remaps the ROM word to SVC #0xFF, SVC handler dispatches through a 16-slot (rom_addr,patch_addr) table; see Program Info 'FPB Patch Registrations'); llcp_pdu_handler_tab_replace clones the ROM LLCP PDU handler table into .bss (llcp_pdu_handler_patch) and overrides opcodes 0x00 CONNECTION_UPDATE_IND, 0x01 CHANNEL_MAP_IND, 0x0F CONNECTION_PARAM_REQ, 0x16 PHY_REQ; '*_ext' (24) = extended HAL; fpb_save_state/fpb_load_state (75 sites each, ROM) toggle the FPB patch set around app callbacks. Everything else (ble_* API wrappers, *_cb callbacks, hal_*/ll_* drivers, platform_*, sdk_*, lld_lcp*, sch_ble_sync, rwip_sleep_common) is ordinary SDK code, not a patch.
+# STACK_MODE=FULL_STACK means the image carries patches for BOTH layers (host: gapm/gapc/gattc/gatts/atts/attm/smpc/l2cm/l2cc; controller: llc/lld/llm/sch/rwip; HCI: llm_hci_command_handler_patch, hci_le_*_cmd_handler_patch x~20, gapc_hci_handler_patch, hci_send_2_controller_patch), not that the stack is here. bt-re-controller will find only the patched subset of handlers; the ROM handler tables themselves (hci_le_event_handler_tab, gapm_msg_handler_tab, llcp_pdu_handler ...) are labels without bytes.
+# BT_SUPPORT=BLE_ONLY set explicitly: write_project_readme.py proposed DUAL_MODE because bb_watch_timer_* (Goodix BLE baseband timer) and sdk/ble_enable_bt_bredr reached the classic threshold (8+2=10); the chip and image are LE-only (no lmp_/lc_/inquiry/page/esco symbols in archive or ROM map).
+# SYNTHETIC: 23 extern function stubs (.extern_stubs: memset/memcpy/memcmp/strlen/rand/srand, __aeabi_* double helpers, SystemCore*Clock, mcu_clk_2_qspi_clk, svc_user_handler) + 3 data placeholders (.extern_data: SystemCoreClock, g_app_msp_addr, round) -- libc/libgcc/app-provided; exclude from censuses. 7 names defined by both archive and ROM (sys_malloc, sys_free, hal_efuse_init/deinit, hal_exflash_msp_init, hal_xqspi_msp_init, ble_nvds_initialized) bind to the archive's code here; their ROM copies are labelled <name>__rom.
+# ADDRESSES: -Ttext=0x00100000 is synthetic (vendor XIP flash base is 0x01002000; chosen inside Thumb BL range of the ROM so 0 thunks). ROM 0x0, RAM alias 0x00800000 (SRAM 0x30000000 via HIGH_RAM_OFFSET), APB 0xA000xxxx, BLE core 0xB000xxxx, PPB 0xE000xxxx are real (gr551xx.h / flash_scatter_config.h / dtm_fcc_test_int.h). MMIO blocks are inferred from references (no SVD on disk). Any _clean_disasm/_all_names_removed variant must derive from Goodix/GR551x_libble_sdk.elf.
+
+# CHIP_NAME detail (kept out of the field on purpose):
+#   GR5515/GR5513, codename BALBOA
